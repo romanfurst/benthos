@@ -35,11 +35,11 @@ install: $(APPS)
 deps:
 	@go mod tidy
 
-SOURCE_FILES = $(shell find lib internal public cmd -type f)
+SOURCE_ILES = $(shell find lib internal public cmd -type f)
 TEMPLATE_FILES = $(shell find template -path template/test -prune -o -type f -name "*.yaml")
 
 $(PATHINSTBIN)/%: $(SOURCE_FILES) $(TEMPLATE_FILES)
-	@go build $(GO_FLAGS) -tags "$(TAGS)" -ldflags "$(LD_FLAGS) $(VER_FLAGS)" -o $@ ./cmd/$*
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_FLAGS) -tags "$(TAGS)" -ldflags "$(LD_FLAGS) $(VER_FLAGS)" -o $@ ./cmd/$*
 
 $(APPS): %: $(PATHINSTBIN)/%
 
@@ -47,7 +47,7 @@ TOOLS = benthos_docs_gen
 tools: $(TOOLS)
 
 $(PATHINSTTOOLS)/%: $(SOURCE_FILES) $(TEMPLATE_FILES)
-	@go build $(GO_FLAGS) -tags "$(TAGS)" -ldflags "$(LD_FLAGS) $(VER_FLAGS)" -o $@ ./cmd/tools/$*
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_FLAGS) -tags "$(TAGS)" -ldflags "$(LD_FLAGS) $(VER_FLAGS)" -o $@ ./cmd/tools/$*
 
 $(TOOLS): %: $(PATHINSTTOOLS)/%
 

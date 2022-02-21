@@ -1,8 +1,10 @@
 package tls
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"os"
 )
@@ -34,8 +36,10 @@ client_certs:
 type ClientCertConfig struct {
 	CertFile string `json:"cert_file" yaml:"cert_file"`
 	KeyFile  string `json:"key_file" yaml:"key_file"`
+	PassFile string `json:"pass_file" yaml:"pass_file"`
 	Cert     string `json:"cert" yaml:"cert"`
 	Key      string `json:"key" yaml:"key"`
+	Pass     string `json:"pass" yaml:"pass"`
 }
 
 // Config contains configuration params for TLS.
@@ -120,7 +124,8 @@ func (c *Config) Get() (*tls.Config, error) {
 // Load returns a TLS certificate, based on either file paths in the
 // config or the raw certs as strings.
 func (c *ClientCertConfig) Load() (tls.Certificate, error) {
-	if c.CertFile != "" || c.KeyFile != "" {
+
+	if c.PassFile == "" && (c.CertFile != "" || c.KeyFile != "") {
 		if c.CertFile == "" {
 			return tls.Certificate{}, errors.New("missing cert_file field in client certificate config")
 		}
@@ -128,7 +133,52 @@ func (c *ClientCertConfig) Load() (tls.Certificate, error) {
 			return tls.Certificate{}, errors.New("missing key_file field in client certificate config")
 		}
 		return tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
+	} else if c.CertFile != "" && c.KeyFile != "" && c.PassFile != "" {
+		passphrase, err := os.ReadFile(c.PassFile)
+		passphrase = bytes.TrimRight(passphrase, "\n")
+		if err != nil {
+			return tls.Certificate{}, errors.New(err.Error())
+		}
+
+		//read keyFile
+		keyPEMBlock, err := os.ReadFile(c.KeyFile)
+		keyBlock, _ := pem.Decode(keyPEMBlock)
+		if err != nil {
+			return tls.Certificate{}, errors.New(err.Error())
+		}
+
+		var keyDER []byte
+		//https://github.com/golang/go/issues/39241
+		// decrypt private key with passphrase
+		if keyBlock.Type == "ENCRYPTED PRIVATE KEY" {
+			//keyDER, _, err = DecryptPBES2(keyBlock.Bytes, []byte("OieTDshQNo"), 1000000)
+			keyDER, _, err = DecryptPBES2(keyBlock.Bytes, passphrase, 1000000)
+		} else if x509.IsEncryptedPEMBlock(keyBlock) {
+			keyDER, err = x509.DecryptPEMBlock(keyBlock, passphrase)
+		} else {
+			keyDER = keyBlock.Bytes
+		}
+		if err != nil {
+			return tls.Certificate{}, errors.New(err.Error())
+		}
+
+		// Update keyBlock with the plaintext bytes and clear the now obsolete
+		// headers.
+		keyBlock.Bytes = keyDER
+		keyBlock.Headers = nil
+		// Turn the key back into PEM format so we can leverage tls.X509KeyPair,
+		// which will deal with the intricacies of error handling, different key
+		// types, certificate chains, etc.
+		keyPEM := pem.EncodeToMemory(keyBlock)
+		//read cert file
+		certPEMBlock, _ := os.ReadFile(c.CertFile)
+		if err != nil {
+			return tls.Certificate{}, errors.New(err.Error())
+		}
+
+		return tls.X509KeyPair(certPEMBlock, keyPEM)
 	}
+
 	if c.Cert == "" {
 		return tls.Certificate{}, errors.New("missing cert field in client certificate config")
 	}

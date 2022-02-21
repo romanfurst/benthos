@@ -260,7 +260,7 @@ func initNormalMode(
 		logger.Errorf("Service closing due to: %v\n", err)
 		os.Exit(1)
 	}
-	logger.Infoln("Launching a benthos instance, use CTRL+C to close.")
+	logger.Debugln("Launching a benthos instance, use CTRL+C to close.")
 
 	if err := confReader.SubscribeConfigChanges(func(newStreamConf stream.Config) bool {
 		if err := stoppableStream.Replace(func() (stoppable, error) {
@@ -472,7 +472,7 @@ func cmdService(
 	case <-sigChan:
 		logger.Infoln("Received SIGTERM, the service is closing.")
 	case <-dataStreamClosedChan:
-		logger.Infoln("Pipeline has terminated. Shutting down the service.")
+		logger.Debugln("Pipeline has terminated. Shutting down the service.")
 	case <-httpServerClosedChan:
 		logger.Infoln("HTTP Server has terminated. Shutting down the service.")
 	case <-optContext.Done():
